@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Alerts — ThreatWatch{% endblock %}
+{% block page_title %}🚨 Security Alerts{% endblock %}
+
+{% block content %}
+<div class="page-header flex justify-between items-center">
+  <div>
+    <h1>Active Alerts</h1>
+    <p>Unacknowledged threats requiring review — auto-refreshes every 30 seconds</p>
+  </div>
+  <div class="flex gap-2">
+    <button class="btn btn-ghost btn-sm" onclick="location.reload()">🔄 Refresh</button>
+  </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="tabs" style="margin-bottom: 20px;">
+  <a href="{{ url_for('alerts') }}" class="tab-btn {% if filter_sev == 'all' %}active{% endif %}">
+    All <span style="margin-left:4px; background:rgba(255,255,255,0.1); padding:1px 7px; border-radius:10px; font-size:11px;">{{ counts.all }}</span>
+  </a>
+  <a href="{{ url_for('alerts', severity='high') }}" class="tab-btn {% if filter_sev == 'high' %}active{% endif %}">
+    🔴 High <span style="margin-left:4px; background:rgba(239,68,68,0.15); color:#f87171; padding:1px 7px; border-radius:10px; font-size:11px;">{{ counts.high }}</span>
+  </a>
+  <a href="{{ url_for('alerts', severity='medium') }}" class="tab-btn {% if filter_sev == 'medium' %}active{% endif %}">
+    🟡 Medium <span style="margin-left:4px; background:rgba(245,158,11,0.15); color:#fbbf24; padding:1px 7px; border-radius:10px; font-size:11px;">{{ counts.medium }}</span>
+  </a>
+</div>
+
+<div class="card">
+  {% if alerts %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>User</th>
+          <th>Alert Type</th>
+          <th>Severity</th>
+          <th>Description</th>
+          <th>Time</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for alert in alerts %}
+        <tr>
+          <td class="text-muted text-sm">#{{ alert.id }}</td>
+          <td>
+            <a href="{{ url_for('user_detail', user_id=alert.user_id) }}"
+               style="color:var(--accent-cyan); font-weight:600; text-decoration:none;">
+              {{ alert.username }}
+            </a>
+            <div class="text-muted text-sm">{{ alert.user_id }}</div>
+          </td>
+          <td style="font-weight: 500;">{{ alert.alert_type }}</td>
+          <td>
+            <span class="badge badge-{{ alert.severity }} {% if alert.severity == 'high' %}pulse{% endif %}">
+              {% if alert.severity == 'high' %}🔴{% else %}🟡{% endif %}
+              {{ alert.severity | upper }}
+            </span>
+          </td>
+          <td style="max-width: 320px; font-size: 13px; color: var(--text-secondary);">
+            {{ alert.description }}
+          </td>
+          <td class="text-sm text-muted" style="white-space: nowrap;">
+            {{ alert.timestamp[:16] if alert.timestamp else '—' }}
+          </td>
+          <td>
+            <form method="post" action="{{ url_for('ack_alert', alert_id=alert.id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-ghost btn-sm" title="Acknowledge this alert">
+                ✓ Acknowledge
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center; padding:60px 20px;">
+    <div style="font-size:48px; margin-bottom:16px;">✅</div>
+    <div style="font-size:18px; font-weight:600; margin-bottom:8px;">No Active Alerts</div>
+    <div style="color:var(--text-secondary); font-size:14px;">
+      {% if filter_sev != 'all' %}
+        No {{ filter_sev }}-severity alerts found. <a href="{{ url_for('alerts') }}" style="color:var(--accent-cyan);">View all</a>
+      {% else %}
+        All alerts have been acknowledged or no anomalies have been detected yet.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Auto-refresh every 30 seconds
+  setTimeout(() => location.reload(), 30000);
+</script>
+{% endblock %}

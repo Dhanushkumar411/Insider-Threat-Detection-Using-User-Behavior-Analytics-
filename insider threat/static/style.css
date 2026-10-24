@@ -1,0 +1,95 @@
+/* Additional styles for Insider Threat Detection UI */
+
+/* Anomaly score gauge */
+.score-gauge {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  margin: 0 auto;
+  border: 3px solid currentColor;
+  font-family: monospace;
+}
+
+/* Severity badge variants */
+.badge-info {
+  background: rgba(58, 140, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* High severity pulse animation */
+.severity-high-row {
+  background: rgba(239, 68, 68, 0.03);
+}
+.severity-high-row:hover {
+  background: rgba(239, 68, 68, 0.06) !important;
+}
+
+/* Custom scrollbar for dark theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 #0f172a;
+}
+
+/* Responsive tables */
+@media (max-width: 768px) {
+  table {
+    font-size: 12px;
+  }
+  th, td {
+    padding: 8px 10px;
+  }
+}
+
+/* Monospace code snippets */
+code {
+  background: rgba(6, 182, 212, 0.1);
+  color: #06b6d4;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+/* IP address display */
+.ip-tag {
+  font-family: monospace;
+  font-size: 12px;
+  background: rgba(51, 65, 85, 0.5);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #94a3b8;
+}
+
+/* Feature value bar */
+.feature-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.feature-bar {
+  flex: 1;
+  height: 6px;
+  background: #1e293b;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.feature-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #06b6d4;
+  transition: width 0.4s;
+}
+
+/* Page fade-in */
+.main-content {
+  animation: fadeIn 0.25s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

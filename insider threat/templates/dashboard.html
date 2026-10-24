@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — ThreatWatch{% endblock %}
+{% block page_title %}📊 Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header flex justify-between items-center">
+  <div>
+    <h1>Security Overview</h1>
+    <p>Real-time user behavior analytics and anomaly detection</p>
+  </div>
+  <button class="btn btn-primary" onclick="runDetection()">⚡ Run Detection</button>
+</div>
+
+<!-- Stat Cards -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-icon">👥</div>
+    <div class="stat-label">Total Users</div>
+    <div class="stat-value">{{ stats.total_users }}</div>
+    <div class="stat-sub">Monitored accounts</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📋</div>
+    <div class="stat-label">Total Events</div>
+    <div class="stat-value">{{ stats.total_logs }}</div>
+    <div class="stat-sub">Activity log entries</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🚨</div>
+    <div class="stat-label">Open Alerts</div>
+    <div class="stat-value" style="color: #fbbf24">{{ stats.open_alerts }}</div>
+    <div class="stat-sub">{{ stats.total_alerts }} total generated</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔴</div>
+    <div class="stat-label">High Severity</div>
+    <div class="stat-value" style="color: #f87171">{{ stats.high_severity_alerts }}</div>
+    <div class="stat-sub">{{ stats.recent_anomalies }} anomalies (24h)</div>
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="charts-grid">
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Anomaly Score Timeline</div>
+        <div class="card-subtitle">Daily average isolation forest score (lower = more anomalous)</div>
+      </div>
+    </div>
+    <div class="chart-container" style="height: 240px;">
+      <canvas id="timelineChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Severity Distribution</div>
+        <div class="card-subtitle">Across all detection windows</div>
+      </div>
+    </div>
+    <div class="chart-container" style="height: 240px; display:flex; align-items:center; justify-content:center;">
+      <canvas id="severityChart" style="max-height:220px;"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Anomalies -->
+<div class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Recent Anomalies</div>
+      <div class="card-subtitle">Latest flagged detection windows</div>
+    </div>
+    <a href="{{ url_for('alerts') }}" class="btn btn-ghost btn-sm">View All Alerts →</a>
+  </div>
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Window</th>
+          <th>Score</th>
+          <th>Severity</th>
+          <th>Key Indicators</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in recent_anomalies %}
+        <tr>
+          <td>
+            <div style="font-weight:600;">{{ a.username }}</div>
+            <div class="text-muted text-sm">{{ a.user_id }}</div>
+          </td>
+          <td class="text-muted text-sm">{{ a.window_start[:16] if a.window_start else '—' }}</td>
+          <td>
+            <span style="font-family:monospace; font-weight:700;
+              color: {% if a.anomaly_score <= -0.15 %}#f87171{% elif a.anomaly_score <= -0.05 %}#fbbf24{% else %}#34d399{% endif %}">
+              {{ '%.4f'|format(a.anomaly_score) }}
+            </span>
+          </td>
+          <td>
+            <span class="badge badge-{{ a.severity }} {% if a.severity == 'high' %}pulse{% endif %}">
+              {{ a.severity | upper }}
+            </span>
+          </td>
+          <td class="text-sm" style="max-width:300px; color:var(--text-secondary);">
+            {% if a.features %}
+              Failed: {{ a.features.get('failed_login_count', 0)|int }} &nbsp;|&nbsp;
+              Files: {{ a.features.get('file_access_count', 0)|int }} &nbsp;|&nbsp;
+              IPs: {{ a.features.get('unique_ips', 0)|int }}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('user_detail', user_id=a.user_id) }}" class="btn btn-ghost btn-sm">Profile</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center; color:var(--text-secondary); padding:32px;">
+            ✅ No anomalies detected yet. Click "Run Detection" to start.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const tsLabels = {{ ts_labels | safe }};
+const tsData   = {{ ts_data | safe }};
+const sevData  = {{ severity_counts | safe }};
+
+// Timeline chart
+new Chart(document.getElementById('timelineChart'), {
+  type: 'line',
+  data: {
+    labels: tsLabels,
+    datasets: [{
+      label: 'Avg Anomaly Score',
+      data: tsData,
+      borderColor: '#06b6d4',
+      backgroundColor: 'rgba(6,182,212,0.08)',
+      borderWidth: 2,
+      pointRadius: 3,
+      pointBackgroundColor: tsData.map(v =>
+        v <= -0.15 ? '#ef4444' : v <= -0.05 ? '#f59e0b' : '#10b981'
+      ),
+      tension: 0.3,
+      fill: true,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1e293b',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#f1f5f9',
+        bodyColor: '#94a3b8',
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#1e293b' },
+        ticks: { color: '#64748b', maxTicksLimit: 10, maxRotation: 45 }
+      },
+      y: {
+        grid: { color: '#1e293b' },
+        ticks: { color: '#64748b' },
+        title: { display: true, text: 'Score', color: '#64748b' }
+      }
+    }
+  }
+});
+
+// Severity doughnut
+new Chart(document.getElementById('severityChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Normal', 'Medium', 'High'],
+    datasets: [{
+      data: [sevData.normal || 0, sevData.medium || 0, sevData.high || 0],
+      backgroundColor: ['rgba(16,185,129,0.7)', 'rgba(245,158,11,0.7)', 'rgba(239,68,68,0.7)'],
+      borderColor: ['#10b981', '#f59e0b', '#ef4444'],
+      borderWidth: 1,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    cutout: '65%',
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: { color: '#94a3b8', padding: 16, font: { size: 12 } }
+      },
+      tooltip: {
+        backgroundColor: '#1e293b',
+        borderColor: '#334155',
+        borderWidth: 1,
+        titleColor: '#f1f5f9',
+        bodyColor: '#94a3b8',
+      }
+    }
+  }
+});
+
+// Run detection
+async function runDetection() {
+  showToast('⏳ Running anomaly detection…');
+  try {
+    const res = await fetch('/api/run-detection', { method: 'POST' });
+    const data = await res.json();
+    showToast(`✅ Detection complete — ${data.alerts_generated} alert(s) generated.`, '#10b981');
+    setTimeout(() => location.reload(), 2000);
+  } catch(e) {
+    showToast('❌ Detection failed: ' + e.message, '#ef4444');
+  }
+}
+</script>
+{% endblock %}

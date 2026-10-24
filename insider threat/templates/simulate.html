@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Simulate — ThreatWatch{% endblock %}
+{% block page_title %}🧪 Event Simulator{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Simulate Activity Event</h1>
+  <p>Inject a custom event and instantly score it for anomaly detection</p>
+</div>
+
+<div class="grid-2" style="align-items: flex-start;">
+
+  <!-- Form -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Event Parameters</div>
+      <div class="card-subtitle">Configure the event to simulate</div>
+    </div>
+
+    <form id="sim-form">
+      <div class="form-group">
+        <label>User Account</label>
+        <select name="user_id" id="user_id" required>
+          {% for u in users %}
+          <option value="{{ u.user_id }}">{{ u.username }} ({{ u.department }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Event Type</label>
+        <select name="event_type" id="event_type">
+          <option value="login">🔑 Login</option>
+          <option value="failed_login">❌ Failed Login</option>
+          <option value="file_access">📄 File Access</option>
+          <option value="logout">🚪 Logout</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Timestamp</label>
+        <input type="datetime-local" name="timestamp" id="timestamp" value="{{ now }}" required />
+        <div style="font-size:11px; color:var(--text-secondary); margin-top:4px;">
+          💡 Try 02:00 AM for off-hours or midnight on a weekend to trigger anomalies
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Resource / Path</label>
+        <input type="text" name="resource" id="resource" value="/shared/documents" placeholder="/path/to/resource" />
+      </div>
+
+      <div class="form-group">
+        <label>IP Address</label>
+        <input type="text" name="ip_address" id="ip_address" value="192.168.1.100" placeholder="x.x.x.x" />
+        <div style="font-size:11px; color:var(--text-secondary); margin-top:4px;">
+          💡 Use 203.x.x.x or 10.0.0.x for suspicious external IPs
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Status</label>
+        <select name="status" id="status">
+          <option value="success">✓ Success</option>
+          <option value="failure">✗ Failure</option>
+        </select>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;">
+          ⚡ Simulate & Score
+        </button>
+        <button type="button" class="btn btn-ghost" onclick="fillSuspicious()">
+          🔴 Fill Suspicious
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Result -->
+  <div>
+    <div class="card" id="result-placeholder" style="text-align:center; padding:50px 20px; color:var(--text-secondary);">
+      <div style="font-size:40px; margin-bottom:12px;">🎯</div>
+      <div style="font-size:15px; font-weight:600; margin-bottom:6px; color:var(--text-primary);">Ready to Analyze</div>
+      <div style="font-size:13px;">Submit an event on the left to see the anomaly score and explanation.</div>
+    </div>
+
+    <div class="card result-card" id="result-card">
+      <div class="card-title" style="margin-bottom:16px;">Detection Result</div>
+
+      <!-- Score Gauge -->
+      <div class="gauge-wrap">
+        <div class="gauge-value" id="res-score">—</div>
+        <div class="gauge-label">Anomaly Score</div>
+        <div style="margin-top:12px;">
+          <span class="badge" id="res-badge">—</span>
+        </div>
+      </div>
+
+      <hr style="border-color:var(--border); margin:16px 0;" />
+
+      <!-- Explanation -->
+      <div style="margin-bottom:12px;">
+        <div style="font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">
+          Explanation
+        </div>
+        <div id="res-explanation" style="font-size:14px; line-height:1.6; color:var(--text-primary);">—</div>
+      </div>
+
+      <!-- Anomaly indicator -->
+      <div id="res-anomaly-row" style="display:none; margin-top:16px; padding:12px; border-radius:8px; font-size:13px;"></div>
+
+      <!-- Link -->
+      <div style="margin-top:16px;">
+        <a id="res-profile-link" href="#" class="btn btn-ghost btn-sm" style="width:100%; justify-content:center; text-align:center;">
+          View User Profile →
+        </a>
+      </div>
+    </div>
+
+    <!-- Anomaly Tips -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title" style="margin-bottom:12px;">💡 Anomaly Trigger Tips</div>
+      <div style="font-size:13px; color:var(--text-secondary); line-height:1.8;">
+        <div>🌙 <b style="color:var(--text-primary)">Off-hours login:</b> Set time to 02:00 AM</div>
+        <div>🔐 <b style="color:var(--text-primary)">Brute force:</b> Submit 6+ failed_login events</div>
+        <div>🗂️ <b style="color:var(--text-primary)">Data exfiltration:</b> Use resource <code>/hr/payroll</code> or <code>/finance/reports</code></div>
+        <div>🌐 <b style="color:var(--text-primary)">Suspicious IP:</b> Use <code>203.0.113.x</code></div>
+        <div>📅 <b style="color:var(--text-primary)">Weekend access:</b> Set date to Saturday/Sunday</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('sim-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  btn.textContent = '⏳ Analyzing…';
+  btn.disabled = true;
+
+  const body = {
+    user_id:    document.getElementById('user_id').value,
+    event_type: document.getElementById('event_type').value,
+    timestamp:  document.getElementById('timestamp').value,
+    resource:   document.getElementById('resource').value,
+    ip_address: document.getElementById('ip_address').value,
+    status:     document.getElementById('status').value,
+  };
+
+  try {
+    const res = await fetch('/simulate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    showResult(data, body.user_id);
+  } catch(err) {
+    showToast('❌ Error: ' + err.message, '#ef4444');
+  } finally {
+    btn.textContent = '⚡ Simulate & Score';
+    btn.disabled = false;
+  }
+});
+
+function showResult(data, user_id) {
+  document.getElementById('result-placeholder').style.display = 'none';
+  const card = document.getElementById('result-card');
+  card.classList.add('visible');
+
+  const score = data.anomaly_score;
+  const scoreEl = document.getElementById('res-score');
+  scoreEl.textContent = score.toFixed(4);
+  scoreEl.style.color = score <= -0.15 ? '#f87171' : score <= -0.05 ? '#fbbf24' : '#34d399';
+
+  const badge = document.getElementById('res-badge');
+  badge.textContent = data.severity.toUpperCase();
+  badge.className = 'badge badge-' + data.severity;
+
+  document.getElementById('res-explanation').textContent = data.explanation;
+
+  const anomRow = document.getElementById('res-anomaly-row');
+  if (data.is_anomaly) {
+    anomRow.style.display = 'block';
+    anomRow.style.background = data.severity === 'high'
+      ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)';
+    anomRow.style.border = '1px solid ' + (data.severity === 'high' ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.3)');
+    anomRow.style.color = data.severity === 'high' ? '#f87171' : '#fbbf24';
+    anomRow.textContent = data.severity === 'high'
+      ? '🔴 HIGH SEVERITY THREAT — Immediate investigation recommended'
+      : '🟡 MEDIUM SEVERITY — Monitor this user closely';
+  } else {
+    anomRow.style.display = 'block';
+    anomRow.style.background = 'rgba(16,185,129,0.1)';
+    anomRow.style.border = '1px solid rgba(16,185,129,0.3)';
+    anomRow.style.color = '#34d399';
+    anomRow.textContent = '✅ NORMAL — Behavior within expected baseline';
+  }
+
+  document.getElementById('res-profile-link').href = '/users/' + user_id;
+  showToast(`Score: ${score.toFixed(4)} — ${data.severity.toUpperCase()}`,
+    score <= -0.15 ? '#ef4444' : score <= -0.05 ? '#f59e0b' : '#10b981');
+}
+
+function fillSuspicious() {
+  // Set to 3AM on a weekday with an external IP
+  const now = new Date();
+  now.setHours(3, 0, 0, 0);
+  const pad = n => String(n).padStart(2, '0');
+  const dt = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T03:00`;
+  document.getElementById('timestamp').value = dt;
+  document.getElementById('event_type').value = 'file_access';
+  document.getElementById('resource').value = '/finance/reports';
+  document.getElementById('ip_address').value = '203.0.113.47';
+  document.getElementById('status').value = 'success';
+  showToast('🔴 Suspicious event prefilled — click Simulate to score it');
+}
+</script>
+{% endblock %}

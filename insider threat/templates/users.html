@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}Users — ThreatWatch{% endblock %}
+{% block page_title %}👥 User Profiles{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>User Behavior Profiles</h1>
+  <p>Monitor individual baselines and detect deviations across all accounts</p>
+</div>
+
+<div style="display: flex; gap: 20px; align-items: flex-start;">
+
+  <!-- User List Panel -->
+  <div style="width: 280px; flex-shrink: 0;">
+    <div class="card" style="padding: 12px;">
+      <div style="padding: 4px 8px 12px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .08em;">
+        All Users ({{ users|length }})
+      </div>
+      {% for u in users %}
+      <a href="{{ url_for('user_detail', user_id=u.user_id) }}"
+         style="display:flex; align-items:center; gap:10px; padding:10px; border-radius:8px; text-decoration:none;
+                background: {% if selected_user and selected_user.user_id == u.user_id %}rgba(6,182,212,0.12){% else %}transparent{% endif %};
+                border: 1px solid {% if selected_user and selected_user.user_id == u.user_id %}rgba(6,182,212,0.3){% else %}transparent{% endif %};
+                margin-bottom:2px; transition: background 0.15s;">
+        <div style="width:36px; height:36px; border-radius:50%; background:var(--bg-hover);
+                    display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;">
+          {{ u.username[0]|upper }}
+        </div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+            {{ u.username }}
+          </div>
+          <div style="font-size:11px; color:var(--text-secondary);">{{ u.department }}</div>
+        </div>
+        <div>
+          {% if u.severity == 'high' %}
+            <span class="badge badge-high" style="font-size:10px; padding:2px 7px;">HIGH</span>
+          {% elif u.severity == 'medium' %}
+            <span class="badge badge-medium" style="font-size:10px; padding:2px 7px;">MED</span>
+          {% else %}
+            <span style="width:8px; height:8px; border-radius:50%; background:#10b981; display:inline-block;"></span>
+          {% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Detail Panel -->
+  <div style="flex: 1; min-width: 0;">
+    {% if selected_user %}
+
+    <!-- User Info -->
+    <div class="card" style="margin-bottom: 16px;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div style="width:56px; height:56px; border-radius:50%; background:rgba(6,182,212,0.15);
+                    display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--accent-cyan);">
+          {{ selected_user.username[0]|upper }}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:20px; font-weight:700;">{{ selected_user.username }}</div>
+          <div style="font-size:13px; color:var(--text-secondary); margin-top:2px;">
+            {{ selected_user.role }} &nbsp;·&nbsp; {{ selected_user.department }}
+            &nbsp;·&nbsp; <code style="font-size:12px; color:var(--accent-cyan);">{{ selected_user.user_id }}</code>
+          </div>
+        </div>
+        {% set latest = scores[0] if scores else none %}
+        {% if latest %}
+        <div style="text-align:right;">
+          <div style="font-size:11px; color:var(--text-secondary); margin-bottom:4px;">Latest Score</div>
+          <div style="font-size:28px; font-weight:800; font-family:monospace;
+            color: {% if latest.anomaly_score <= -0.15 %}#f87171{% elif latest.anomaly_score <= -0.05 %}#fbbf24{% else %}#34d399{% endif %}">
+            {{ '%.4f'|format(latest.anomaly_score) }}
+          </div>
+          <span class="badge badge-{{ latest.severity }}">{{ latest.severity | upper }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Score History Chart -->
+    {% if score_dates %}
+    <div class="card" style="margin-bottom: 16px;">
+      <div class="card-header">
+        <div class="card-title">Anomaly Score History</div>
+        <div class="card-subtitle">Per 24h detection window</div>
+      </div>
+      <div style="height: 180px;">
+        <canvas id="userScoreChart"></canvas>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Behavior Profile -->
+    {% if profile %}
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-header">
+        <div class="card-title">Behavior Profile</div>
+        <div class="card-subtitle">Average feature values across all windows</div>
+      </div>
+      <div style="height: 200px;">
+        <canvas id="profileChart"></canvas>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <span class="tab-btn active" id="tab-logs-btn" onclick="switchTab('logs')">📋 Activity Logs</span>
+      <span class="tab-btn" id="tab-scores-btn" onclick="switchTab('scores')">📈 Anomaly Windows</span>
+    </div>
+
+    <!-- Logs Tab -->
+    <div id="tab-logs" class="card">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Event</th><th>Resource</th><th>IP Address</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            {% for log in logs %}
+            <tr>
+              <td class="text-sm text-muted">{{ log.timestamp[:16] }}</td>
+              <td>
+                {% if log.event_type == 'failed_login' %}
+                  <span class="badge badge-high">{{ log.event_type }}</span>
+                {% elif log.event_type == 'login' %}
+                  <span class="badge badge-normal">{{ log.event_type }}</span>
+                {% elif log.event_type == 'file_access' %}
+                  <span class="badge badge-blue">{{ log.event_type }}</span>
+                {% else %}
+                  <span class="badge" style="background:rgba(100,116,139,0.15); color:#94a3b8;">{{ log.event_type }}</span>
+                {% endif %}
+              </td>
+              <td class="text-sm" style="font-family:monospace; color:var(--text-secondary);">{{ log.resource or '—' }}</td>
+              <td class="text-sm" style="font-family:monospace;">{{ log.ip_address or '—' }}</td>
+              <td>
+                {% if log.status == 'failure' %}
+                  <span style="color:#f87171;">✗ Failure</span>
+                {% else %}
+                  <span style="color:#34d399;">✓ Success</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center; color:var(--text-secondary); padding:24px;">No logs found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Scores Tab -->
+    <div id="tab-scores" class="card" style="display:none;">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Window Start</th><th>Score</th><th>Severity</th><th>Failed Logins</th><th>File Accesses</th><th>IPs</th></tr>
+          </thead>
+          <tbody>
+            {% for s in scores %}
+            <tr>
+              <td class="text-sm text-muted">{{ s.window_start[:16] }}</td>
+              <td style="font-family:monospace; font-weight:700;
+                color: {% if s.anomaly_score <= -0.15 %}#f87171{% elif s.anomaly_score <= -0.05 %}#fbbf24{% else %}#34d399{% endif %}">
+                {{ '%.4f'|format(s.anomaly_score) }}
+              </td>
+              <td><span class="badge badge-{{ s.severity }}">{{ s.severity|upper }}</span></td>
+              <td class="text-sm text-muted">{{ s.is_anomaly | int }}</td>
+              <td class="text-sm text-muted">{{ s.window_start[:10] }}</td>
+              <td><a href="{{ url_for('user_detail', user_id=s.user_id) }}" class="btn btn-ghost btn-sm">Details</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center; color:var(--text-secondary); padding:24px;">No anomaly windows yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% else %}
+    <!-- No user selected -->
+    <div class="card" style="text-align:center; padding:60px 20px;">
+      <div style="font-size:48px; margin-bottom:16px;">👈</div>
+      <div style="font-size:16px; font-weight:600; margin-bottom:8px;">Select a User</div>
+      <div style="color:var(--text-secondary); font-size:14px;">Click any user in the panel to view their behavior profile and anomaly history.</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(tab) {
+  document.getElementById('tab-logs').style.display = tab === 'logs' ? '' : 'none';
+  document.getElementById('tab-scores').style.display = tab === 'scores' ? '' : 'none';
+  document.getElementById('tab-logs-btn').className = 'tab-btn' + (tab === 'logs' ? ' active' : '');
+  document.getElementById('tab-scores-btn').className = 'tab-btn' + (tab === 'scores' ? ' active' : '');
+}
+
+{% if score_dates is defined and score_vals is defined %}
+const scoreDates = {{ score_dates | safe }};
+const scoreVals  = {{ score_vals | safe }};
+if (scoreDates.length > 0) {
+  new Chart(document.getElementById('userScoreChart'), {
+    type: 'line',
+    data: {
+      labels: scoreDates,
+      datasets: [{
+        label: 'Anomaly Score',
+        data: scoreVals,
+        borderColor: '#06b6d4',
+        backgroundColor: 'rgba(6,182,212,0.06)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: scoreVals.map(v =>
+          v <= -0.15 ? '#ef4444' : v <= -0.05 ? '#f59e0b' : '#10b981'
+        ),
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1, titleColor: '#f1f5f9', bodyColor: '#94a3b8' }
+      },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxTicksLimit: 8, maxRotation: 45 } },
+        y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+      }
+    }
+  });
+}
+{% endif %}
+
+{% if profile is defined and profile %}
+const profileData = {{ profile | tojson }};
+const labels = Object.keys(profileData);
+const means  = labels.map(k => profileData[k].mean);
+new Chart(document.getElementById('profileChart'), {
+  type: 'bar',
+  data: {
+    labels: labels,
+    datasets: [{
+      label: 'Mean Value',
+      data: means,
+      backgroundColor: 'rgba(6,182,212,0.4)',
+      borderColor: '#06b6d4',
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false },
+      tooltip: { backgroundColor: '#1e293b', borderColor: '#334155', borderWidth: 1, titleColor: '#f1f5f9', bodyColor: '#94a3b8' }
+    },
+    scales: {
+      x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b', maxRotation: 45 } },
+      y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+    }
+  }
+});
+{% endif %}
+</script>
+{% endblock %}
